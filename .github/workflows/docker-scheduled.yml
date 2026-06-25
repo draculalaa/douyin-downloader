@@ -1,0 +1,69 @@
+# 定时构建 Docker 镜像并推送到 GitHub Container Registry (ghcr.io)
+# 触发方式：每周日凌晨 2:00（UTC+8 = 周六 18:00 UTC）
+# 构建版本：核心版（仅 requirements.txt 中的基础依赖）
+#
+# 注意：该项目的 Git tag 被桌面版使用，因此不按 tag 构建。
+# 本 workflow 仅通过定时任务构建 latest 镜像。
+
+name: Scheduled Docker Build
+
+on:
+  schedule:
+    # 每周日 UTC 时间 18:00（北京时间周日 02:00）
+    - cron: "0 18 * * 6"
+  push:
+    branches: [main]
+    paths:
+      - "Dockerfile"
+      - "requirements.txt"
+      - ".github/workflows/docker-scheduled.yml"
+  workflow_dispatch:        # 支持手动触发
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}   # → ghcr.io/jiji262/douyin-downloader
+
+permissions:
+  contents: read
+  packages: write   # 推送到 ghcr.io 需要
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate metadata (tags and labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            # 每次定时构建都更新 latest
+            type=raw,value=latest,enable={{is_default_branch}}
+            # 同时打一个日期标签方便回滚，如 2026-06-26
+            type=raw,value={{date 'YYYY-MM-DD'}}
+          flavor: |
+            latest=false   # 不自动追加 latest（由上面 raw 控制）
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 利用 GitHub Actions 缓存加速二次构建
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
