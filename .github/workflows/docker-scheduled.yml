@@ -4,6 +4,10 @@
 #
 # 注意：该项目的 Git tag 被桌面版使用，因此不按 tag 构建。
 # 本 workflow 仅通过定时任务构建 latest 镜像。
+#
+# 构建来源：直接拉取上游 jiji262/douyin-downloader 的 main 分支源码构建，
+# 保证镜像始终跟上游同步（fork 的 main 不会自动同步上游）。
+# 本 fork 仅作为 workflow 的载体。
 
 name: Scheduled Docker Build
 
@@ -21,7 +25,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}   # → ghcr.io/jiji262/douyin-downloader
+  IMAGE_NAME: ${{ github.repository }}   # → ghcr.io/draculalaa/douyin-downloader
 
 permissions:
   contents: read
@@ -31,8 +35,11 @@ jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
+      - name: Checkout upstream source
         uses: actions/checkout@v4
+        with:
+          repository: jiji262/douyin-downloader   # 直接构建上游 main，跟随上游最新改动
+          ref: main
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
